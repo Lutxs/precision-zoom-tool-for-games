@@ -114,6 +114,25 @@ This project was initially generated with the assistance of AI and then reviewed
 
 All code has been reviewed and tested manually.
 
+## Known Issues
+
+- **Initial crosshair ghosting**  
+  On the first activation of the zoom function (Right Mouse Button), the crosshair may briefly appear duplicated or "ghosted." This is particularly noticeable when using custom PNG reticles.
+
+  **Cause:**
+  This occurs because the magnification logic captures a frame that already includes the overlay, creating a momentary visual feedback loop. The issue resolves itself once the button is released and typically does not recur during the same session.
+
+  **Workaround:**  
+  Uncomment the following lines to exclude the overlay from the magnification process and eliminate the ghosting effect:
+
+  ```cpp
+  // SetAffinity(g_hwndHost, 0x00000011); 
+  // SetAffinity(g_hwndCrosshair, 0x00000011);
+  ```
+  Trade-off:
+  Enabling these lines will prevent screenshots and screen recording to capture the overlay.
+  However, modern high-tier anti-cheats often take silent screenshots of your desktop to look for unauthorized overlays, setting this flag is suspicious and is effectively telling the anti-cheat, "Don't look at this window."
+  
 ## License
 
 MIT License
