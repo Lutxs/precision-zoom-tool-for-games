@@ -129,7 +129,7 @@ All code has been reviewed and tested manually.
   // SetAffinity(g_hwndHost, 0x00000011); 
   // SetAffinity(g_hwndCrosshair, 0x00000011);
   ```
-  Trade-off:
+  **Trade-off:**
   Enabling these lines will prevent screenshots and screen recording to capture the overlay.
   However, modern high-tier anti-cheats often take silent screenshots of your desktop to look for unauthorized overlays, setting this flag is suspicious and is effectively telling the anti-cheat, "Don't look at this window."
   
