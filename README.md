@@ -4,7 +4,8 @@ A lightweight Windows magnifier overlay that follows the cursor while you hold a
 
 ## Preview
 
-<img width="296" height="515" alt="image" src="https://github.com/user-attachments/assets/06896cc4-4a75-49ca-bdf3-dd28f55cedca" />
+### Settings:
+<img width="722" alt="Settings window" src="docs/settings.png" />
 
 ### Disabled:
 <img width="1903" height="1396" alt="image" src="https://github.com/user-attachments/assets/c0a3fd1f-7b6b-4e75-a224-3b7c0f1a9308" />
