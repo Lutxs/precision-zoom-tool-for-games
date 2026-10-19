@@ -56,7 +56,7 @@ Zoom changed with the hotkeys is remembered: it's saved when you release the zoo
 | Reticle line width (px) and color | 1 – 25 |
 | X / Y offset (px) | ± half the box size |
 | Reticle image | PNG file, or the built-in cross |
-| Hotkeys | Hold to zoom, toggle modifier, zoom in, zoom out |
+| Hotkeys | Hold to zoom, toggle modifier, zoom in, zoom out (click the button, then press a key or mouse button; Esc cancels) |
 | Hide overlay from screen capture | on/off (see Notes) |
 | Beep when toggled | on/off |
 
@@ -66,7 +66,7 @@ Prebuilt executables are attached to each [GitHub release](https://github.com/Lu
 
 ## Building
 
-Requirements: Windows 10 or 11, [Rust](https://rustup.rs) (stable, MSVC toolchain) and the Visual Studio Build Tools with the Windows SDK (needed by the MSVC linker and the resource compiler).
+Requirements: Windows 10 or 11 (the settings window needs OpenGL 2.0 or newer, which any GPU driver provides), [Rust](https://rustup.rs) (stable, MSVC toolchain) and the Visual Studio Build Tools with the Windows SDK (needed by the MSVC linker and the resource compiler).
 
 ```powershell
 .\build.ps1          # fmt check, clippy, tests, then a release build into .\dist
@@ -94,13 +94,18 @@ The app creates:
 
 A small background thread only acts as a high-resolution timer. On each tick it posts a message to the UI thread, which polls the hotkeys, moves both windows in one atomic step and refreshes the magnified image. Windows are never touched from the background thread. Tick messages are also handled while menus or dialogs are open, so zoom keeps working then.
 
+The settings window runs its own event loop on a separate thread. It sends changes to the controller as posted messages, and the controller publishes its state (for example zoom changed with the hotkeys, or on/off from the tray) back to it, so a busy or modal settings window never delays the zoom. Closing the window only hides it.
+
 Source layout:
 
 | File | Purpose |
 |---|---|
 | `src/app.rs` | Controller, magnifier/overlay windows, tray icon, per-tick logic |
-| `src/settings.rs` | Settings window |
-| `src/config.rs` | Settings model, validation, registry storage, legacy migration |
+| `src/ui.rs` | Settings window (egui): layout, hotkey binding, sync with the controller |
+| `src/ui_theme.rs` | Palette, fonts and custom widgets (switch, segmented control, cards) |
+| `src/preview.rs` | Settings preview rendering |
+| `src/icon_art.rs` | The app icon, shared by `build.rs` and the settings header |
+| `src/config.rs` | Settings model, clamping, hotkey checks, registry storage, legacy migration |
 | `src/input.rs` | Hotkey state machine (toggle, auto-repeat) |
 | `src/geometry.rs` | Zoom stepping and capture-rectangle math |
 | `src/overlay.rs` | Border/reticle rendering and layered-window upload |

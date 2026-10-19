@@ -3,14 +3,17 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
+#[path = "src/icon_art.rs"]
+mod icon_art;
+
+use icon_art::{ACCENT_OFF, ACCENT_ON, render};
+
 const SIZES: &[u32] = &[16, 20, 24, 32, 40, 48, 64, 256];
-const BACKGROUND: [u8; 3] = [0x1F, 0x29, 0x37];
-const ACCENT_ON: [u8; 3] = [0xEF, 0x44, 0x44];
-const ACCENT_OFF: [u8; 3] = [0x9C, 0xA3, 0xAF];
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=res/app.manifest");
+    println!("cargo:rerun-if-changed=src/icon_art.rs");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }
@@ -78,58 +81,6 @@ END
     )
     .unwrap();
     s
-}
-
-/// A dark disc with a scope ring, cross and center dot, in normalized
-/// coordinates (-1..1). Returns the color covering the point, if any.
-fn shade(x: f32, y: f32, accent: [u8; 3]) -> Option<[u8; 3]> {
-    let r = (x * x + y * y).sqrt();
-    if r > 0.96 {
-        return None;
-    }
-    let ring = (r - 0.62).abs() < 0.085;
-    let arm = |a: f32, b: f32| a.abs() < 0.07 && (0.22..0.88).contains(&b.abs());
-    let dot = r < 0.11;
-    Some(if ring || arm(x, y) || arm(y, x) || dot {
-        accent
-    } else {
-        BACKGROUND
-    })
-}
-
-/// Renders one icon image as straight-alpha RGBA with 4×4 supersampling.
-fn render(size: u32, accent: [u8; 3]) -> Vec<[u8; 4]> {
-    const SS: u32 = 4;
-    let mut px = Vec::with_capacity((size * size) as usize);
-    for py in 0..size {
-        for pxi in 0..size {
-            let (mut rgb, mut hits) = ([0u32; 3], 0u32);
-            for sy in 0..SS {
-                for sx in 0..SS {
-                    let fx = (pxi as f32 + (sx as f32 + 0.5) / SS as f32) / size as f32 * 2.0 - 1.0;
-                    let fy = (py as f32 + (sy as f32 + 0.5) / SS as f32) / size as f32 * 2.0 - 1.0;
-                    if let Some(c) = shade(fx, fy, accent) {
-                        hits += 1;
-                        for i in 0..3 {
-                            rgb[i] += c[i] as u32;
-                        }
-                    }
-                }
-            }
-            px.push(if hits == 0 {
-                [0, 0, 0, 0]
-            } else {
-                let a = hits * 255 / (SS * SS);
-                [
-                    (rgb[0] / hits) as u8,
-                    (rgb[1] / hits) as u8,
-                    (rgb[2] / hits) as u8,
-                    a as u8,
-                ]
-            });
-        }
-    }
-    px
 }
 
 /// Builds a multi-resolution .ico with 32-bit BMP images.

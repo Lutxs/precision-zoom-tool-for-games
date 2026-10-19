@@ -2,7 +2,7 @@
 //! the per-tick zoom logic. Everything here runs on the UI thread.
 
 use std::cell::RefCell;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use tiny_skia::Pixmap;
 use windows_sys::Win32::Foundation::{
@@ -30,8 +30,8 @@ use crate::geometry;
 use crate::input::{InputState, Inputs};
 use crate::keys;
 use crate::overlay;
-use crate::settings;
 use crate::ticker::Ticker;
+use crate::ui;
 use crate::win::{self, wide};
 
 pub const CONTROLLER_CLASS: &str = "PrecisionZoomController";
@@ -61,8 +61,9 @@ pub struct App {
     input: InputState,
     ticker: Option<Ticker>,
     zoomed: bool,
-    /// Zoom was changed with the hotkeys and not saved yet.
-    zoom_dirty: bool,
+    /// Unsaved changes are written to the registry at this time. Debounced so
+    /// slider drags and held zoom keys don't write on every step.
+    save_due: Option<Instant>,
     last_cursor: Option<(i32, i32)>,
     taskbar_created: u32,
 }
@@ -221,13 +222,15 @@ fn run_inner(open_settings: bool) -> Result<(), String> {
         input: InputState::default(),
         ticker: None,
         zoomed: false,
-        zoom_dirty: false,
+        save_due: None,
         last_cursor: None,
         taskbar_created: unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) },
     };
-    if let Err(e) = app.apply(config) {
-        // Startup falls back to the built-in cross rather than nagging.
-        eprintln!("{e}");
+    let startup_warning = app.apply(config).err();
+    ui::init(controller, &app.config, app.input.enabled);
+    if let Some(warning) = startup_warning {
+        // Shown as a banner the next time the settings window opens.
+        ui::publish(&app.config, app.input.enabled, true, Some(warning));
     }
     app.add_tray_icon();
     app.ticker = Some(Ticker::start(
@@ -237,17 +240,13 @@ fn run_inner(open_settings: bool) -> Result<(), String> {
     ));
     APP.with(|a| *a.borrow_mut() = Some(app));
 
-    settings::create(hinst)?;
     if open_settings {
-        settings::show();
+        ui::show();
     }
 
     unsafe {
         let mut msg: MSG = std::mem::zeroed();
         while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
-            if settings::is_dialog_message(&msg) {
-                continue;
-            }
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
@@ -338,9 +337,22 @@ impl App {
             self.last_cursor = None; // force a re-layout at the new size
             self.place(cursor_pos());
         }
-        self.zoom_dirty = false;
         self.update_tray();
         warning
+    }
+
+    fn schedule_save(&mut self) {
+        self.save_due = Some(Instant::now() + Duration::from_millis(600));
+    }
+
+    fn save_now(&mut self) {
+        self.config.save();
+        self.save_due = None;
+    }
+
+    /// Tells the settings window about a change it didn't make itself.
+    fn publish(&self) {
+        ui::publish(&self.config, self.input.enabled, true, None);
     }
 
     fn set_transform(&self) {
@@ -371,9 +383,10 @@ impl App {
                 let z = geometry::step_zoom(self.config.zoom, out.zoom_steps);
                 if z != self.config.zoom {
                     self.config.zoom = z;
-                    self.zoom_dirty = true;
                     self.set_transform();
-                    settings::zoom_changed(z);
+                    self.schedule_save();
+                    self.update_tray();
+                    self.publish();
                 }
             }
             let pt = cursor_pos();
@@ -384,6 +397,9 @@ impl App {
             }
         } else if self.zoomed {
             self.hide();
+        }
+        if self.save_due.is_some_and(|t| Instant::now() >= t) {
+            self.save_now();
         }
     }
 
@@ -449,11 +465,6 @@ impl App {
             ShowWindow(self.host, SW_HIDE);
         }
         self.zoomed = false;
-        if self.zoom_dirty {
-            // Persist hotkey zoom changes once per zoom session, not every step.
-            self.config.save();
-            self.zoom_dirty = false;
-        }
     }
 
     pub fn set_enabled(&mut self, enabled: bool) {
@@ -474,6 +485,7 @@ impl App {
             }
         }
         self.update_tray();
+        self.publish();
     }
 
     fn tray_data(&self) -> NOTIFYICONDATAW {
@@ -601,13 +613,26 @@ unsafe extern "system" fn controller_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: 
         WM_APP_TRAY => {
             match lp as u32 {
                 WM_RBUTTONUP | WM_CONTEXTMENU => show_tray_menu(),
-                WM_LBUTTONDBLCLK => settings::show(),
+                WM_LBUTTONDBLCLK => ui::show(),
                 _ => {}
             }
             0
         }
         WM_APP_SHOW_SETTINGS => {
-            settings::show();
+            ui::show();
+            0
+        }
+        ui::WM_APP_APPLY => {
+            let cfg = unsafe { ui::take_applied(lp) };
+            with_app(|a| {
+                let warning = a.apply(cfg).err();
+                a.schedule_save();
+                ui::publish(&a.config, a.input.enabled, false, warning);
+            });
+            0
+        }
+        ui::WM_APP_SET_ENABLED => {
+            with_app(|a| a.set_enabled(wp != 0));
             0
         }
         WM_COMMAND => {
@@ -615,7 +640,7 @@ unsafe extern "system" fn controller_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: 
                 ID_MENU_ENABLED => {
                     with_app(|a| a.set_enabled(!a.input.enabled));
                 }
-                ID_MENU_SETTINGS => settings::show(),
+                ID_MENU_SETTINGS => ui::show(),
                 ID_MENU_EXIT => unsafe {
                     DestroyWindow(hwnd);
                 },
@@ -626,8 +651,8 @@ unsafe extern "system" fn controller_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: 
         WM_DESTROY => {
             with_app(|a| {
                 a.remove_tray_icon();
-                if a.zoom_dirty {
-                    a.config.save();
+                if a.save_due.is_some() {
+                    a.save_now();
                 }
             });
             unsafe { PostQuitMessage(0) };

@@ -4,11 +4,14 @@
 mod app;
 mod config;
 mod geometry;
+mod icon_art;
 mod input;
 mod keys;
 mod overlay;
-mod settings;
+mod preview;
 mod ticker;
+mod ui;
+mod ui_theme;
 mod win;
 
 use windows_sys::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError};
