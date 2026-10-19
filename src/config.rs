@@ -5,9 +5,7 @@
 //! struct as one binary blob). Missing or out-of-range values fall back to
 //! their defaults. Settings from the C++ version are migrated on first load.
 
-use std::fmt::Display;
 use std::ops::RangeInclusive;
-use std::str::FromStr;
 
 use crate::keys;
 use crate::win::wide;
@@ -307,26 +305,6 @@ fn ansi_to_string(bytes: &[u8]) -> String {
     String::from_utf16_lossy(&buf[..n.max(0) as usize])
 }
 
-/// Parses a settings form field, returning a message naming the field and its valid range on error.
-pub fn parse_field<T>(label: &str, text: &str, range: RangeInclusive<T>) -> Result<T, String>
-where
-    T: FromStr + PartialOrd + Display + Copy,
-{
-    let err = || {
-        format!(
-            "{label} must be a number from {} to {}.",
-            range.start(),
-            range.end()
-        )
-    };
-    let v: T = text.trim().parse().map_err(|_| err())?;
-    if range.contains(&v) {
-        Ok(v)
-    } else {
-        Err(err())
-    }
-}
-
 struct Reg {
     subkey: Vec<u16>,
 }
@@ -522,20 +500,6 @@ mod tests {
             ..Config::default()
         };
         assert!(unbound.check_hotkeys().is_ok());
-    }
-
-    #[test]
-    fn parse_field_validates() {
-        assert_eq!(parse_field("Zoom", " 2.5 ", ZOOM), Ok(2.5));
-        assert!(
-            parse_field("Zoom", "0", ZOOM)
-                .unwrap_err()
-                .contains("1.1 to 16")
-        );
-        assert!(parse_field("Zoom", "", ZOOM).is_err());
-        assert!(parse_field("Zoom", "abc", ZOOM).is_err());
-        assert!(parse_field("Size", "-5", SIZE).is_err());
-        assert_eq!(parse_field("Size", "400", SIZE), Ok(400));
     }
 
     #[test]

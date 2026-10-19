@@ -80,10 +80,6 @@ pub fn is_known(vk: u16) -> bool {
     all().iter().any(|k| k.vk == vk)
 }
 
-pub fn index_of(vk: u16) -> Option<usize> {
-    all().iter().position(|k| k.vk == vk)
-}
-
 pub fn name_of(vk: u16) -> &'static str {
     all()
         .iter()
@@ -108,7 +104,6 @@ mod tests {
         assert_eq!(name_of(VK_RBUTTON), "Right mouse button");
         assert_eq!(name_of(0x70), "F1");
         assert_eq!(name_of(0x5A), "Z");
-        assert_eq!(index_of(NONE), Some(0));
         assert!(!is_known(0xFF));
     }
 }
