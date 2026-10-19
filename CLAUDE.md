@@ -20,7 +20,9 @@ Windows-only Rust app (Win32 via `windows-sys`, settings UI via `eframe`/egui). 
 ## Live testing
 - The registry key holds the user's real settings: back it up (`reg export`) before tests and restore it after.
 - Screenshots: capture only the app's own windows with `PrintWindow(hwnd, hdc, PW_RENDERFULLCONTENT)`. Never use screen-region capture (`CopyFromScreen`/`BitBlt` of the desktop): the app window may be behind other windows, and it captures whatever the user has on screen.
-- Drive the settings UI without moving the real cursor by posting `WM_MOUSEMOVE`/`WM_LBUTTONDOWN`/`WM_LBUTTONUP` with client coordinates to the egui window (find it by process id; its class isn't `PrecisionZoom*`).
+- `.\screenshot.ps1` regenerates the README's `docs\settings.png` this way (it needs no running instance and exits the one it starts). Run it after changing the settings UI.
+- Call `SetThreadDpiAwarenessContext(-4)` (per-monitor v2) before measuring windows from PowerShell. Otherwise `GetWindowRect` returns sizes scaled down by the display scale, while `DwmGetWindowAttribute` frame bounds stay physical, and crops come out wrong.
+- Drive the settings UI without moving the real cursor by posting `WM_MOUSEMOVE`/`WM_LBUTTONDOWN`/`WM_LBUTTONUP` with client coordinates to the egui window (find it by process id: it's the visible window titled `Precision Zoom` whose class isn't `PrecisionZoom*`; winit also owns a visible, untitled 22×22 `Winit Thread Event Target` window).
 - Don't inject right-clicks to trigger zoom. Bind the zoom key to Right Ctrl (`0xA3`, via the UI or `TriggerKey` in the registry before launch), inject that key with `keybd_event`, then restore `TriggerKey` = 2 and `ZoomX100`.
 - Ghosting check: while zoomed, count reticle-colored pixels on the center row of the magnifier (the overlay alone gives `reticle_size + 1`; about `zoom` times that means the overlay is being magnified). This needs screen pixels, so count them in memory and don't save or view the image.
 - In PowerShell P/Invoke, pass `[NullString]::Value`, not `$null`, for null string arguments (e.g. `FindWindow` titles); `$null` becomes `""`.
