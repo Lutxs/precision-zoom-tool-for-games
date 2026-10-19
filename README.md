@@ -1,6 +1,6 @@
 # Precision Zoom Tool
 
-A lightweight Windows desktop zoom overlay with optional crosshair support, PNG reticle loading, circular scope mode, negative contrast mode, and tray-based settings access.
+A lightweight Windows magnifier overlay that follows the cursor while you hold a key, with crosshair/PNG reticle support, circular scope mode, negative contrast mode and a tray-based settings window. Written in Rust.
 
 ## Preview
 
@@ -12,127 +12,134 @@ A lightweight Windows desktop zoom overlay with optional crosshair support, PNG 
 ### Enabled:
 <img width="1505" height="1222" alt="image" src="https://github.com/user-attachments/assets/9ac55dfc-e62b-49a5-90f1-0e2ca6b48fd1" />
 
-
 ## Features
 
 - Zooms the area around the cursor using the Windows Magnification API
-- Optional crosshair overlay
-- Optional PNG reticle support
-- Circular scope mode
-- Negative contrast mode
-- Adjustable opacity, border thickness, zoom factor, and window size
-- X/Y offset controls for the center marker
-- System tray icon with settings and exit options
-- Saves settings in the current user registry
+- Built-in crosshair or your own PNG reticle (per-pixel alpha, so soft edges look right)
+- Circular scope mode with an anti-aliased border
+- Negative (inverted colors) mode
+- Adjustable zoom, box size, opacity, border width/color, reticle size/line width/color and refresh interval
+- X/Y offset controls for the reticle
+- Configurable hotkeys (zoom key, toggle modifier, zoom in/out)
+- Settings apply instantly, with no restart needed
+- Input validation with clear messages; invalid values are never saved
+- Optional "hide overlay from screen capture"
+- Tray icon that shows on/off state, with Enabled / Settings / Exit menu
+- Single instance: launching it again opens the running copy's settings
+- Per-monitor DPI aware settings window
+- Settings stored per value in the current user's registry; settings from the old C++ version are migrated automatically
 
-## Controls
+## Controls (defaults)
 
-- **Right Mouse Button**: hold to zoom
-- **Left Shift + Right Mouse Button**: toggle the tool on or off
-- **Plus / Minus**: adjust zoom while active
-- **Tray icon**: open settings or exit the app
+| Action | Default | Configurable |
+|---|---|---|
+| Zoom while held | Right mouse button | Yes |
+| Toggle the tool on/off | Hold Left Shift + Right mouse button | Yes (modifier) |
+| Zoom in / out while zoomed | `=` / `-` (tap = one step, hold to repeat) | Yes |
+| Settings | Double-click the tray icon, or right-click → Settings | |
+| Exit | Tray icon → Exit | |
+
+Zoom changed with the hotkeys is remembered: it's saved when you release the zoom key.
 
 ## Settings
 
-The settings window lets you change:
+| Setting | Range |
+|---|---|
+| Zoom factor | 1.1 – 16 |
+| Box size (px) | 64 – 1600 |
+| Opacity (%) | 10 – 100 |
+| Refresh interval (ms) | 1 – 100 |
+| Border (px) and color | 0 – 50 |
+| Circular scope, Negative mode | on/off |
+| Show reticle | on/off |
+| Reticle size (px) | 4 – 1600 |
+| Reticle line width (px) and color | 1 – 25 |
+| X / Y offset (px) | ± half the box size |
+| Reticle image | PNG file, or the built-in cross |
+| Hotkeys | Hold to zoom, toggle modifier, zoom in, zoom out |
+| Hide overlay from screen capture | on/off (see Notes) |
+| Beep when toggled | on/off |
 
-- Zoom factor
-- Box size
-- Opacity
-- Border thickness
-- Circular scope mode
-- Negative mode
-- Crosshair visibility
-- Crosshair size
-- X offset
-- Y offset
-- PNG reticle path
+## Download
 
-## Intended Use
+Prebuilt executables are attached to each [GitHub release](https://github.com/Lutxs/precision-zoom-tool-for-games/releases). Every push also builds one as a CI artifact.
 
-This tool is designed for general desktop use and game scenarios where overlays are permitted.
+## Building
+
+Requirements: Windows 10 or 11, [Rust](https://rustup.rs) (stable, MSVC toolchain) and the Visual Studio Build Tools with the Windows SDK (needed by the MSVC linker and the resource compiler).
+
+```powershell
+.\build.ps1          # fmt check, clippy, tests, then a release build into .\dist
+.\build.ps1 -Fast    # release build only
+```
+
+Or with Cargo directly:
+
+```powershell
+cargo build --release   # target\release\precision-zoom.exe
+cargo test
+```
+
+Run `precision-zoom.exe`. Pass `--settings` to open the settings window on startup.
+
+To publish a release, push a tag such as `v0.2.0`. CI builds the executable and attaches it to a GitHub release.
 
 ## How it works
 
 The app creates:
-- a magnifier host window
-- a crosshair window
-- a settings window
-- a system tray icon
+- a hidden controller window that owns the tray icon and does all the work on the UI thread,
+- a magnifier host window containing the Windows magnifier control,
+- a click-through overlay window that draws the border and reticle with per-pixel alpha (rendered with [tiny-skia](https://github.com/linebender/tiny-skia)),
+- the settings window.
 
-A background thread polls input and updates the overlay position and magnified region while zoom is active.
+A small background thread only acts as a high-resolution timer. On each tick it posts a message to the UI thread, which polls the hotkeys, moves both windows in one atomic step and refreshes the magnified image. Windows are never touched from the background thread. Tick messages are also handled while menus or dialogs are open, so zoom keeps working then.
 
-## Build Requirements
+Source layout:
 
-- Windows
-- Visual Studio or another MSVC-compatible compiler
-- Windows SDK
-- GDI+
-- Windows Magnification API support
+| File | Purpose |
+|---|---|
+| `src/app.rs` | Controller, magnifier/overlay windows, tray icon, per-tick logic |
+| `src/settings.rs` | Settings window |
+| `src/config.rs` | Settings model, validation, registry storage, legacy migration |
+| `src/input.rs` | Hotkey state machine (toggle, auto-repeat) |
+| `src/geometry.rs` | Zoom stepping and capture-rectangle math |
+| `src/overlay.rs` | Border/reticle rendering and layered-window upload |
+| `src/ticker.rs` | High-resolution tick thread |
+| `src/keys.rs` | Bindable keys |
+| `build.rs` | Generates the app icons; embeds icons, manifest and version info |
 
-### Linked libraries
+## Registry storage
 
-The project uses:
-
-- `comctl32.lib`
-- `advapi32.lib`
-- `gdiplus.lib`
-- `ole32.lib`
-- `comdlg32.lib`
-
-## Build Instructions
-
-1. Open the x64 Native Tools Command Prompt for Visual Studio.
-2. Make sure the Windows SDK is installed.
-3. Build the project with:
-
-```bat
-cl.exe /W4 /EHsc /O2 zoom_tool.cpp /link Magnification.lib User32.lib Gdi32.lib Shell32.lib Comctl32.lib Advapi32.lib Gdiplus.lib Ole32.lib Comdlg32.lib /SUBSYSTEM:WINDOWS
-```
-4. Run the executable.
-5. Open the tray menu to access settings.
-
-## Registry Storage
-
-Settings are stored under:
+Settings are stored as individual values under:
 
 `HKCU\Software\PrecisionZoomTool`
 
+If a `Settings` binary value from the C++ version is found, it is converted once and then removed.
+
 ## Notes
 
-- IMPORTANT: This tool uses layered topmost windows and screen magnification behavior, so some games or strict anti-cheat systems may restrict it.
-- It does not inject into other processes or modify game memory.
-- PNG reticle loading is optional. If no PNG is loaded and crosshair is enabled, the app falls back to a built-in crosshair.
+- IMPORTANT: This tool uses topmost layered windows and screen magnification, so some games or strict anti-cheat systems may restrict it. It does not inject into other processes, install hooks or read/modify game memory. Keys are read by polling.
+- **Hide overlay from screen capture** keeps the magnifier and reticle out of screenshots and recordings (`SetWindowDisplayAffinity`). Modern anti-cheats often take silent screenshots to look for overlays, and setting this flag effectively says "don't look at this window", which may be treated as suspicious. It is off by default.
+- If a PNG reticle can't be loaded (moved, deleted, not a PNG), the app falls back to the built-in cross.
+- Intended for desktop use and for games where overlays are permitted.
 
-## Project Status
+## Changes from the C++ version
 
-This project is functional and ready for further polish.
+- **Fixed:** crosshair "ghosting", where the reticle got magnified along with the screen. The magnifier ignores its exclusion list for windows that are hidden when the list is set. The list is now set right after the windows are shown and before the first paint, and the zoom transform and capture area are also set before anything becomes visible. The screen-capture workaround is no longer needed and is now an opt-in setting.
+- **Fixed:** a zoom factor of 0 or an empty field divided by zero. A box size or opacity of 0 broke the overlay. All input is now validated and clamped.
+- **Fixed:** settings saved as a raw struct dump broke whenever the layout changed. They are now stored per value, with migration.
+- **Fixed:** the zoom transform and color effect were re-sent every 10 ms. They are now set only when they change.
+- **Fixed:** `+`/`-` jumped about five steps per second regardless of a tap, and the result was lost on restart. Taps are now single steps with auto-repeat, and the result is saved.
+- **Fixed:** windows were manipulated from the input thread. All window work now happens on the UI thread.
+- **Fixed:** releasing the toggle modifier before the zoom key popped the magnifier up right after a toggle.
+- **Fixed:** PNG paths with non-ASCII characters (ANSI code page) failed. Paths are now Unicode.
+- **New:** app icon with on/off tray states, live settings (no relaunch), configurable hotkeys and colors, a DPI-aware settings window, single-instance handling, and the tray icon is restored when Explorer restarts.
+- **New:** build script, `.gitignore`, and GitHub Actions CI that builds, tests and attaches the `.exe` to releases.
 
 ## Development Note
 
-This project was initially generated with the assistance of AI and then reviewed and refined.
+This project was initially generated with the assistance of AI and then reviewed and refined. The Rust rewrite was also written with AI assistance (Claude Code).
 
-All code has been reviewed and tested manually.
-
-## Known Issues
-
-- **Initial crosshair ghosting**  
-  On the first activation of the zoom function (Right Mouse Button), the crosshair may briefly appear duplicated or "ghosted." This is particularly noticeable when using custom PNG reticles.
-
-  **Cause:**
-  This occurs because the magnification logic captures a frame that already includes the overlay, creating a momentary visual feedback loop. The issue resolves itself once the button is released and typically does not recur during the same session.
-
-  **Workaround:**  
-  Uncomment the following lines to exclude the overlay from the magnification process and eliminate the ghosting effect:
-
-  ```cpp
-  // SetAffinity(g_hwndHost, 0x00000011); 
-  // SetAffinity(g_hwndCrosshair, 0x00000011);
-  ```
-  **Trade-off:**
-  Enabling these lines will prevent screenshots and screen recording to capture the overlay.
-  However, modern high-tier anti-cheats often take silent screenshots of your desktop to look for unauthorized overlays, setting this flag is suspicious and is effectively telling the anti-cheat, "Don't look at this window."
-  
 ## License
 
 MIT License
