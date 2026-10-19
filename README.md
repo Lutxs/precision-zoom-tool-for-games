@@ -4,14 +4,18 @@ A lightweight Windows magnifier overlay that follows the cursor while you hold a
 
 ## Preview
 
-### Settings:
+### Settings
 <img width="722" alt="Settings window" src="docs/settings.png" />
 
-### Disabled:
-<img width="1903" height="1396" alt="image" src="https://github.com/user-attachments/assets/c0a3fd1f-7b6b-4e75-a224-3b7c0f1a9308" />
+### Third-person view
+Without zoom, then holding the zoom key (circular scope, red cross):
 
-### Enabled:
-<img width="1505" height="1222" alt="image" src="https://github.com/user-attachments/assets/9ac55dfc-e62b-49a5-90f1-0e2ca6b48fd1" />
+<img width="800" alt="Third-person tank view without zoom" src="docs/third-person-off.jpg" />
+<img width="800" alt="Third-person tank view with the circular magnifier and red cross reticle" src="docs/third-person-on.jpg" />
+
+### Gunner sight
+<img width="800" alt="Tank gunner sight without zoom" src="docs/gunner-sight-off.jpg" />
+<img width="800" alt="Tank gunner sight with the magnifier over a distant tank" src="docs/gunner-sight-on.jpg" />
 
 ## Features
 
